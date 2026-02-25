@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+python-multipart
+pypdf
+python-dotenv
+
+langchain==0.3.12
+langchain-core==0.3.63
+langchain-community==0.3.12
+langchain-qdrant==0.2.1
+langchain-huggingface==0.2.0
+langchain-groq==0.3.2
+
+qdrant-client==1.17.0
+docling

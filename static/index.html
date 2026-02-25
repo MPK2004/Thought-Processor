@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dealer AI</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Inter, Arial, sans-serif;
+            background: #0f172a;
+            color: white;
+            display: flex;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        .app {
+            width: 900px;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .upload-section {
+            background: #1e293b;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+        }
+
+        input[type="file"],
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            border: none;
+            margin-top: 10px;
+            margin-bottom: 10px;
+        }
+
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background: #2563eb;
+        }
+
+        .chat-container {
+            flex: 1;
+            background: #1e293b;
+            padding: 15px;
+            border-radius: 10px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+        }
+
+        .message {
+            margin-bottom: 12px;
+            padding: 10px 14px;
+            border-radius: 10px;
+            max-width: 80%;
+        }
+
+        .user {
+            background: #3b82f6;
+            align-self: flex-end;
+        }
+
+        .bot {
+            background: #334155;
+            align-self: flex-start;
+        }
+
+        .input-section {
+            display: flex;
+            gap: 10px;
+        }
+
+        .input-section input {
+            flex: 1;
+        }
+
+        .footer {
+            text-align: center;
+            font-size: 12px;
+            margin-top: 8px;
+            color: #94a3b8;
+        }
+    </style>
+</head>
+<body>
+
+<div class="app">
+    <h1>RAG Assistant</h1>
+
+    <div class="upload-section">
+        <strong>Upload A Document</strong>
+        <input type="file" id="pdfFile">
+        <button onclick="uploadPDF()">Upload</button>
+    </div>
+
+    <div class="chat-container" id="chat"></div>
+
+    <div class="input-section">
+        <input type="text" id="question" placeholder="Ask about the car...">
+        <button onclick="askQuestion()">Send</button>
+    </div>
+
+    <div class="footer">
+        FastAPI | Qdrant | Groq | RAG Architecture
+    </div>
+</div>
+
+<script>
+async function uploadPDF() {
+    const file = document.getElementById("pdfFile").files[0];
+    const formData = new FormData();
+    formData.append("file", file);
+
+    await fetch("/upload", {
+        method: "POST",
+        body: formData
+    });
+
+    alert("Document uploaded successfully!");
+}
+
+function addMessage(text, type) {
+    const chat = document.getElementById("chat");
+    const msg = document.createElement("div");
+    msg.classList.add("message", type);
+    msg.innerText = text;
+    chat.appendChild(msg);
+    chat.scrollTop = chat.scrollHeight;
+}
+
+async function askQuestion() {
+    const questionInput = document.getElementById("question");
+    const question = questionInput.value;
+    if (!question) return;
+
+    addMessage(question, "user");
+    questionInput.value = "";
+
+    const response = await fetch("/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question })
+    });
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let result = "";
+
+    const botMessage = document.createElement("div");
+    botMessage.classList.add("message", "bot");
+    document.getElementById("chat").appendChild(botMessage);
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        result += decoder.decode(value);
+        botMessage.innerText = result;
+        document.getElementById("chat").scrollTop =
+            document.getElementById("chat").scrollHeight;
+    }
+}
+</script>
+
+</body>
+</html>
