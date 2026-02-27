@@ -21,7 +21,8 @@ jobs:
 
             echo "📦 Pulling latest code..."
             cd /root/Thought-Processor
-            git pull origin main
+            git fetch origin main
+            git reset --hard origin/main
 
             echo "🔧 Building containers..."
             docker compose build --no-cache
