@@ -1,213 +1,220 @@
-import os
-import time
-import shutil
-import gc
-from typing import List
+"""
+Dealer RAG API — Production-grade FastAPI application.
 
-from fastapi import FastAPI, UploadFile, File
+Refactored from the original chatbot_fast.py:
+- Upload endpoint is now async (returns job_id, processes via worker)
+- Ask endpoint has Redis caching + Redis-backed chat history
+- No global mutable state
+- No collection deletion (multi-document support)
+- LangSmith tracing preserved via load_dotenv()
+"""
+
+import os
+import uuid
+
+from fastapi import FastAPI, UploadFile, File, Depends
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
-from dotenv import load_dotenv
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from pypdf import PdfReader, PdfWriter
-from langchain_core.documents import Document
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_groq import ChatGroq
-from langchain_qdrant import Qdrant
-from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams
+from sqlalchemy.orm import Session
+
 from langchain_core.prompts import ChatPromptTemplate
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains import create_history_aware_retriever
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
-from qdrant_client.models import VectorParams, Distance
-from qdrant_client.http.exceptions import UnexpectedResponse
-from qdrant_client import QdrantClient
-from langchain_qdrant import QdrantVectorStore
+from langchain_core.messages import HumanMessage, AIMessage
 
-load_dotenv()
+from config import llm, get_vector_store, UPLOAD_DIR, ensure_collection
+from database import create_tables, get_db
+from models import IngestionJob, JobStatus
+from redis_client import (
+    get_cached_response,
+    set_cached_response,
+    get_chat_history,
+    append_chat_history,
+    get_job_queue,
+)
 
+# ── App setup ────────────────────────────────────────────────────────
 app = FastAPI(title="Dealer RAG API")
-
-QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION")
-QDRANT_URL = os.getenv("QDRANT_URL")
-QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Ensure upload directory exists
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
+@app.on_event("startup")
+def startup():
+    """Run once when the API starts."""
+    create_tables()
+    ensure_collection()
+
 
 @app.get("/")
 def serve_frontend():
     return FileResponse("static/index.html")
-embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-
-llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0.4)
-llm_summary = ChatGroq(model="openai/gpt-oss-120b", temperature=0.3)
 
 
-
-# First ensure collection exists
-client = QdrantClient(
-    url=QDRANT_URL,
-    api_key=QDRANT_API_KEY,
-)
-
-collections = [c.name for c in client.get_collections().collections]
-
-if QDRANT_COLLECTION not in collections:
-    client.create_collection(
-        collection_name=QDRANT_COLLECTION,
-        vectors_config=VectorParams(
-            size=384,
-            distance=Distance.COSINE,
-        ),
-    )
-
-# Then connect via LangChain
-vector_store = QdrantVectorStore(
-    client=client,
-    collection_name=QDRANT_COLLECTION,
-    embedding=embeddings,
-)
-chat_history: List = []
-
+# ── Request models ───────────────────────────────────────────────────
 class QuestionRequest(BaseModel):
     question: str
+    session_id: str = "default"
 
-from docling.document_converter import DocumentConverter, PdfFormatOption
-from docling.datamodel.pipeline_options import PdfPipelineOptions
-from docling.datamodel.base_models import InputFormat
+
+# =============================================================================
+# UPLOAD ENDPOINT — Async job submission
+# =============================================================================
 
 @app.post("/upload")
-async def upload_pdf(file: UploadFile = File(...)):
+async def upload_pdf(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """
+    Save uploaded PDF to the shared volume and enqueue an ingestion job.
+    Returns immediately with a job_id for polling.
+    """
+    # 1. Generate unique job ID
+    job_id = str(uuid.uuid4())
 
-    global vector_store
-    global chat_history
-
-    temp_dir = "temp_pages"
-    os.makedirs(temp_dir, exist_ok=True)
-
-    file_path = os.path.join(temp_dir, file.filename)
+    # 2. Save file to shared volume (accessible by worker container)
+    file_ext = os.path.splitext(file.filename)[1]
+    safe_filename = f"{job_id}{file_ext}"
+    file_path = os.path.join(UPLOAD_DIR, safe_filename)
 
     with open(file_path, "wb") as f:
-        f.write(await file.read())
+        content = await file.read()
+        f.write(content)
 
-    # 🔥 Reset collection (demo mode)
-    client.delete_collection(QDRANT_COLLECTION)
+    # 3. Create job record in PostgreSQL
+    job = IngestionJob(
+        id=job_id,
+        filename=file.filename,
+        status=JobStatus.PENDING,
+    )
+    db.add(job)
+    db.commit()
 
-    client.create_collection(
-        collection_name=QDRANT_COLLECTION,
-        vectors_config=VectorParams(
-            size=384,
-            distance=Distance.COSINE,
-        ),
+    # 4. Enqueue ingestion task to Redis queue
+    queue = get_job_queue()
+    queue.enqueue(
+        "worker.process_ingestion",
+        job_id,
+        file_path,
+        file.filename,
+        job_timeout="30m",  # OCR can be slow for large PDFs
     )
 
-    # Recreate vector store
-    vector_store = QdrantVectorStore(
-        client=client,
-        collection_name=QDRANT_COLLECTION,
-        embedding=embeddings,
+    return JSONResponse(
+        content={"job_id": job_id, "status": "PENDING"},
+        status_code=202,
     )
 
-    # Clear chat history
-    chat_history.clear()
 
-    # Configure OCR + Table extraction
-    pipeline_options = PdfPipelineOptions()
-    pipeline_options.do_ocr = True
-    pipeline_options.do_table_structure = True
+# =============================================================================
+# JOB STATUS ENDPOINT — Poll for ingestion progress
+# =============================================================================
 
-    converter = DocumentConverter(
-        format_options={
-            InputFormat.PDF: PdfFormatOption(
-                pipeline_options=pipeline_options
-            )
-        }
-    )
+@app.get("/job/{job_id}")
+async def get_job_status(job_id: str, db: Session = Depends(get_db)):
+    """Poll the status of an ingestion job."""
+    job = db.query(IngestionJob).filter(IngestionJob.id == job_id).first()
+    if not job:
+        return JSONResponse(
+            content={"error": "Job not found"}, status_code=404
+        )
+    return JSONResponse(content=job.to_dict())
 
-    doc_converted = converter.convert(file_path)
-    md_content = doc_converted.document.export_to_markdown()
 
-    langchain_doc = Document(
-        page_content=md_content,
-        metadata={"source": file.filename}
-    )
-
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=800,
-        chunk_overlap=200
-    )
-
-    splits = text_splitter.split_documents([langchain_doc])
-
-    vector_store.add_documents(splits)
-
-    shutil.rmtree(temp_dir)
-
-    return {"message": "PDF processed with OCR and stored successfully."}
-# =========================
-# ASK ENDPOINT
-# =========================
+# =============================================================================
+# ASK ENDPOINT — With Redis caching + Redis-backed chat history
+# =============================================================================
 
 @app.post("/ask")
 async def ask_question(request: QuestionRequest):
+    """
+    Answer a question using retrieved document context.
+    - Checks Redis cache first
+    - Uses Redis-backed per-session chat history
+    - Streams the response
+    """
+    session_id = request.session_id
 
+    # 1. Check Redis cache
+    cached = get_cached_response(request.question)
+    if cached:
+        return StreamingResponse(
+            iter([cached]), media_type="text/plain"
+        )
+
+    # 2. Rebuild chat history from Redis
+    history_data = get_chat_history(session_id)
+    chat_history = []
+    for entry in history_data:
+        if entry["role"] == "human":
+            chat_history.append(HumanMessage(content=entry["content"]))
+        else:
+            chat_history.append(AIMessage(content=entry["content"]))
+
+    # 3. Retrieve relevant documents (existing logic preserved)
+    vector_store = get_vector_store()
     retriever = vector_store.as_retriever(search_kwargs={"k": 5})
 
     contextualize_prompt = ChatPromptTemplate.from_messages([
-        ("system",
-         "Rephrase the user question into standalone form if needed."),
+        (
+            "system",
+            "Rephrase the user question into standalone form if needed.",
+        ),
         ("placeholder", "{chat_history}"),
-        ("human", "{input}")
+        ("human", "{input}"),
     ])
 
     history_aware_retriever = create_history_aware_retriever(
-        llm,
-        retriever,
-        contextualize_prompt
+        llm, retriever, contextualize_prompt
     )
 
     retrieved_docs = history_aware_retriever.invoke({
         "input": request.question,
-        "chat_history": chat_history
+        "chat_history": chat_history,
     })
 
+    # 4. Generate answer (existing logic preserved)
     system_prompt = (
-    "You are a document analysis assistant.\n\n"
-    "Guidelines:\n"
-    "1. Use only the provided document context.\n"
-    "2. If the answer is not present, say: 'Not mentioned in the document.'\n"
-    "3. Be concise but informative.\n"
-    "4. When appropriate, summarize key points clearly.\n"
-    "5. Do not add external knowledge.\n\n"
-    "6. If the question is vague, infer intent from context but do not hallucinate."
-    "Document Context:\n{context}"
-    
-)
+        "You are a document analysis assistant.\n\n"
+        "Guidelines:\n"
+        "1. Use only the provided document context.\n"
+        "2. If the answer is not present, say: 'Not mentioned in the document.'\n"
+        "3. Be concise but informative.\n"
+        "4. When appropriate, summarize key points clearly.\n"
+        "5. Do not add external knowledge.\n"
+        "6. If the question is vague, infer intent from context but do not hallucinate.\n\n"
+        "Document Context:\n{context}"
+    )
 
     qa_prompt = ChatPromptTemplate.from_messages([
         ("system", system_prompt),
         ("placeholder", "{chat_history}"),
-        ("human", "{input}")
+        ("human", "{input}"),
     ])
 
     question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
 
+    # 5. Stream response + cache + save history
     def stream_response():
         full_response = ""
 
         for chunk in question_answer_chain.stream({
             "input": request.question,
             "chat_history": chat_history,
-            "context": retrieved_docs
+            "context": retrieved_docs,
         }):
             full_response += chunk
             yield chunk
 
-        chat_history.extend([
-            HumanMessage(content=request.question),
-            AIMessage(content=full_response)
-        ])
+        # Cache the full response
+        set_cached_response(request.question, full_response)
+
+        # Persist chat history to Redis
+        append_chat_history(session_id, request.question, full_response)
 
     return StreamingResponse(stream_response(), media_type="text/plain")

@@ -1,0 +1,39 @@
+name: Deploy to DigitalOcean
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy to Droplet
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          script: |
+            set -e
+
+            echo "📦 Pulling latest code..."
+            cd /root/Thought-Processor
+            git pull origin main
+
+            echo "🔧 Building containers..."
+            docker compose build --no-cache
+
+            echo "🔄 Restarting stack..."
+            docker compose down
+            docker compose up -d
+
+            echo "⏳ Waiting for health checks..."
+            sleep 10
+
+            echo "✅ Checking service status..."
+            docker compose ps
+
+            echo "🎉 Deployment complete!"

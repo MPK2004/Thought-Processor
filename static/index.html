@@ -1,182 +1,509 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dealer AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=Inter:wght@300;400;500;600&display=swap"
+        rel="stylesheet">
     <style>
-        body {
+        :root {
+            --bg-dark: #09090b;
+            --bg-card: rgba(24, 24, 27, 0.65);
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        * {
+            box-sizing: border-box;
             margin: 0;
-            font-family: Inter, Arial, sans-serif;
-            background: #0f172a;
-            color: white;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
             display: flex;
             justify-content: center;
+            align-items: center;
             height: 100vh;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Ambient background glow */
+        .ambient-glow {
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, rgba(0, 0, 0, 0) 70%);
+            top: -200px;
+            left: -200px;
+            z-index: -1;
+            border-radius: 50%;
+            pointer-events: none;
+            filter: blur(50px);
+        }
+
+        .ambient-glow-2 {
+            position: absolute;
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, rgba(139, 92, 246, 0.1) 0%, rgba(0, 0, 0, 0) 70%);
+            bottom: -100px;
+            right: -100px;
+            z-index: -1;
+            border-radius: 50%;
+            pointer-events: none;
+            filter: blur(50px);
         }
 
         .app {
-            width: 900px;
+            width: 100%;
+            max-width: 900px;
+            height: 90vh;
             display: flex;
             flex-direction: column;
-            padding: 20px;
+            background: var(--bg-card);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            box-shadow: var(--glass-shadow);
+            padding: 24px;
+            animation: fadeIn 0.8s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         h1 {
+            font-family: 'Outfit', sans-serif;
             text-align: center;
-            margin-bottom: 10px;
+            font-weight: 600;
+            font-size: 2rem;
+            margin-bottom: 24px;
+            background: linear-gradient(135deg, #fff 0%, #a5b4fc 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
         }
 
         .upload-section {
-            background: #1e293b;
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-color);
+            padding: 16px 20px;
+            border-radius: 16px;
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
         }
 
-        input[type="file"],
-        input[type="text"] {
-            width: 100%;
-            padding: 10px;
+        .upload-section:hover {
+            border-color: rgba(255, 255, 255, 0.15);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .upload-text {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .upload-text strong {
+            font-size: 0.95rem;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .upload-text span {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .upload-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .file-label {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px dashed rgba(255, 255, 255, 0.2);
+            padding: 8px 16px;
             border-radius: 8px;
-            border: none;
-            margin-top: 10px;
-            margin-bottom: 10px;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .file-label:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border-color: rgba(255, 255, 255, 0.4);
         }
 
         button {
-            background: #3b82f6;
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, var(--primary) 0%, #4f46e5 100%);
             color: white;
             border: none;
-            padding: 10px 18px;
-            border-radius: 8px;
+            padding: 10px 20px;
+            border-radius: 10px;
             cursor: pointer;
-            font-weight: bold;
+            font-weight: 500;
+            font-size: 0.9rem;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
         }
 
         button:hover {
-            background: #2563eb;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
         }
 
+        button:active {
+            transform: translateY(0);
+        }
+
+        /* The Chat Area */
         .chat-container {
             flex: 1;
-            background: #1e293b;
-            padding: 15px;
-            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--border-color);
+            padding: 20px;
+            border-radius: 16px;
             overflow-y: auto;
-            margin-bottom: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            scroll-behavior: smooth;
+        }
+
+        /* Custom Scrollbar */
+        .chat-container::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .chat-container::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .chat-container::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+
+        .chat-container::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
         }
 
         .message {
-            margin-bottom: 12px;
-            padding: 10px 14px;
-            border-radius: 10px;
+            padding: 14px 18px;
+            border-radius: 18px;
             max-width: 80%;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            animation: messageSlide 0.3s ease-out;
+            word-wrap: break-word;
+        }
+
+        @keyframes messageSlide {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .user {
-            background: #3b82f6;
+            background: linear-gradient(135deg, var(--primary) 0%, #4f46e5 100%);
+            color: white;
             align-self: flex-end;
+            border-bottom-right-radius: 4px;
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.15);
         }
 
         .bot {
-            background: #334155;
+            background: rgba(30, 41, 59, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            color: #e2e8f0;
             align-self: flex-start;
+            border-bottom-left-radius: 4px;
         }
 
         .input-section {
             display: flex;
-            gap: 10px;
+            gap: 12px;
+            position: relative;
         }
 
         .input-section input {
             flex: 1;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-color);
+            color: white;
+            padding: 14px 20px;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.3s ease;
+            outline: none;
+        }
+
+        .input-section input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .input-section input:focus {
+            border-color: rgba(59, 130, 246, 0.5);
+            background: rgba(255, 255, 255, 0.06);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
         }
 
         .footer {
             text-align: center;
-            font-size: 12px;
-            margin-top: 8px;
-            color: #94a3b8;
+            font-size: 0.75rem;
+            margin-top: 16px;
+            color: var(--text-muted);
+            font-weight: 300;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        /* Empty state styling */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-muted);
+            opacity: 0.7;
+        }
+
+        .empty-state svg {
+            width: 48px;
+            height: 48px;
+            margin-bottom: 16px;
+            opacity: 0.5;
         }
     </style>
 </head>
+
 <body>
 
-<div class="app">
-    <h1>RAG Assistant</h1>
+    <div class="ambient-glow"></div>
+    <div class="ambient-glow-2"></div>
 
-    <div class="upload-section">
-        <strong>Upload A Document</strong>
-        <input type="file" id="pdfFile">
-        <button onclick="uploadPDF()">Upload</button>
+    <div class="app">
+        <h1>RAG Assistant</h1>
+
+        <div class="upload-section">
+            <div class="upload-text">
+                <strong>Knowledge Base</strong>
+                <span>Upload a PDF document to provide context</span>
+            </div>
+            <div class="upload-controls">
+                <label for="pdfFile" class="file-label" id="fileLabel">Choose file</label>
+                <input type="file" id="pdfFile" accept=".pdf" onchange="updateFileName()">
+                <button onclick="uploadPDF()">Upload</button>
+            </div>
+        </div>
+
+        <div class="chat-container" id="chat">
+            <div class="empty-state" id="emptyState">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                <p>Upload a document and ask a question to get started</p>
+            </div>
+        </div>
+
+        <div class="input-section">
+            <input type="text" id="question" placeholder="Ask a question about the document..."
+                onkeypress="handleKeyPress(event)">
+            <button onclick="askQuestion()">Send</button>
+        </div>
+
+        <div class="footer">
+            FastAPI • Qdrant • Groq • Redis • PostgreSQL • RAG Architecture
+        </div>
     </div>
 
-    <div class="chat-container" id="chat"></div>
+    <script>
+        // Generate a unique session ID per browser tab
+        const SESSION_ID = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
 
-    <div class="input-section">
-        <input type="text" id="question" placeholder="Ask about the car...">
-        <button onclick="askQuestion()">Send</button>
-    </div>
+        function updateFileName() {
+            const fileInput = document.getElementById("pdfFile");
+            const label = document.getElementById("fileLabel");
+            if (fileInput.files.length > 0) {
+                label.innerText = fileInput.files[0].name;
+            } else {
+                label.innerText = "Choose file";
+            }
+        }
 
-    <div class="footer">
-        FastAPI | Qdrant | Groq | RAG Architecture
-    </div>
-</div>
+        async function uploadPDF() {
+            const fileInput = document.getElementById("pdfFile");
+            if (fileInput.files.length === 0) {
+                alert("Please select a file first.");
+                return;
+            }
+            const file = fileInput.files[0];
+            const formData = new FormData();
+            formData.append("file", file);
 
-<script>
-async function uploadPDF() {
-    const file = document.getElementById("pdfFile").files[0];
-    const formData = new FormData();
-    formData.append("file", file);
+            const btn = document.querySelector('.upload-controls button');
+            btn.innerText = "Uploading...";
+            btn.disabled = true;
 
-    await fetch("/upload", {
-        method: "POST",
-        body: formData
-    });
+            try {
+                const res = await fetch("/upload", {
+                    method: "POST",
+                    body: formData
+                });
+                const data = await res.json();
 
-    alert("Document uploaded successfully!");
-}
+                if (data.job_id) {
+                    btn.innerText = "Processing...";
+                    pollJobStatus(data.job_id, btn);
+                } else {
+                    btn.innerText = "Upload";
+                    btn.disabled = false;
+                    alert("Upload failed.");
+                }
+            } catch (e) {
+                btn.innerText = "Upload";
+                btn.disabled = false;
+                alert("Error uploading document.");
+            }
+        }
 
-function addMessage(text, type) {
-    const chat = document.getElementById("chat");
-    const msg = document.createElement("div");
-    msg.classList.add("message", type);
-    msg.innerText = text;
-    chat.appendChild(msg);
-    chat.scrollTop = chat.scrollHeight;
-}
+        function pollJobStatus(jobId, btn) {
+            const interval = setInterval(async () => {
+                try {
+                    const res = await fetch(`/job/${jobId}`);
+                    const data = await res.json();
 
-async function askQuestion() {
-    const questionInput = document.getElementById("question");
-    const question = questionInput.value;
-    if (!question) return;
+                    if (data.status === "COMPLETED") {
+                        clearInterval(interval);
+                        btn.innerText = "✅ Done";
+                        btn.disabled = false;
+                        setTimeout(() => { btn.innerText = "Upload"; }, 3000);
+                    } else if (data.status === "FAILED") {
+                        clearInterval(interval);
+                        btn.innerText = "❌ Failed";
+                        btn.disabled = false;
+                        alert("Ingestion failed: " + (data.error_message || "Unknown error"));
+                        setTimeout(() => { btn.innerText = "Upload"; }, 3000);
+                    } else {
+                        // PENDING or PROCESSING — keep polling
+                        btn.innerText = `Processing... (${data.status})`;
+                    }
+                } catch (e) {
+                    clearInterval(interval);
+                    btn.innerText = "Upload";
+                    btn.disabled = false;
+                }
+            }, 2000);
+        }
 
-    addMessage(question, "user");
-    questionInput.value = "";
+        function removeEmptyState() {
+            const emptyState = document.getElementById("emptyState");
+            if (emptyState) {
+                emptyState.remove();
+            }
+        }
 
-    const response = await fetch("/ask", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question })
-    });
+        function addMessage(text, type) {
+            removeEmptyState();
+            const chat = document.getElementById("chat");
+            const msg = document.createElement("div");
+            msg.classList.add("message", type);
+            msg.innerText = text;
+            chat.appendChild(msg);
+            chat.scrollTop = chat.scrollHeight;
+        }
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let result = "";
+        function handleKeyPress(event) {
+            if (event.key === "Enter") {
+                askQuestion();
+            }
+        }
 
-    const botMessage = document.createElement("div");
-    botMessage.classList.add("message", "bot");
-    document.getElementById("chat").appendChild(botMessage);
+        async function askQuestion() {
+            const questionInput = document.getElementById("question");
+            const question = questionInput.value.trim();
+            if (!question) return;
 
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        result += decoder.decode(value);
-        botMessage.innerText = result;
-        document.getElementById("chat").scrollTop =
-            document.getElementById("chat").scrollHeight;
-    }
-}
-</script>
+            addMessage(question, "user");
+            questionInput.value = "";
+
+            try {
+                const response = await fetch("/ask", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ question, session_id: SESSION_ID })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let result = "";
+
+                const botMessage = document.createElement("div");
+                botMessage.classList.add("message", "bot");
+                document.getElementById("chat").appendChild(botMessage);
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    result += decoder.decode(value);
+                    botMessage.innerText = result;
+                    document.getElementById("chat").scrollTop = document.getElementById("chat").scrollHeight;
+                }
+            } catch (e) {
+                addMessage("Sorry, I encountered an error while processing your request.", "bot");
+                console.error("Chat error:", e);
+            }
+        }
+    </script>
 
 </body>
+
 </html>
