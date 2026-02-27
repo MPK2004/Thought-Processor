@@ -13,7 +13,6 @@ from langchain_qdrant import QdrantVectorStore
 
 load_dotenv()
 
-# ── Env vars ─────────────────────────────────────────────────────────
 QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "dealer_docs")
 QDRANT_URL = os.getenv("QDRANT_URL")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
@@ -23,13 +22,11 @@ UPLOAD_DIR = os.getenv("UPLOAD_DIR", "/app/uploads")
 
 MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
 
-# ── Shared objects ───────────────────────────────────────────────────
 embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
 llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0.4)
 llm_summary = ChatGroq(model="openai/gpt-oss-120b", temperature=0.3)
 
-# ── Qdrant client + collection bootstrap ─────────────────────────────
 qdrant_client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
 
 

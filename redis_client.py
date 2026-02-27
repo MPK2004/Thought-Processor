@@ -10,7 +10,6 @@ import redis
 from rq import Queue
 from config import REDIS_URL
 
-# ── Connection ─────────────────────────────────────────────────────
 _redis: Optional[redis.Redis] = None
 
 
@@ -27,7 +26,6 @@ def get_job_queue() -> Queue:
     return Queue(connection=redis.Redis.from_url(REDIS_URL))
 
 
-# ── Response caching ───────────────────────────────────────────────
 CACHE_TTL = 300  # 5 minutes
 
 
@@ -47,7 +45,6 @@ def set_cached_response(question: str, answer: str) -> None:
     r.setex(_question_hash(question), CACHE_TTL, answer)
 
 
-# ── Chat history (Redis-backed, per session) ──────────────────────
 HISTORY_TTL = 3600  # 1 hour
 
 

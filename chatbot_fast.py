@@ -1,14 +1,3 @@
-"""
-Dealer RAG API — Production-grade FastAPI application.
-
-Refactored from the original chatbot_fast.py:
-- Upload endpoint is now async (returns job_id, processes via worker)
-- Ask endpoint has Redis caching + Redis-backed chat history
-- No global mutable state
-- No collection deletion (multi-document support)
-- LangSmith tracing preserved via load_dotenv()
-"""
-
 import os
 import uuid
 
@@ -35,7 +24,6 @@ from redis_client import (
     get_job_queue,
 )
 
-# ── App setup ────────────────────────────────────────────────────────
 app = FastAPI(title="Dealer RAG API")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -55,7 +43,6 @@ def serve_frontend():
     return FileResponse("static/index.html")
 
 
-# ── Request models ───────────────────────────────────────────────────
 class QuestionRequest(BaseModel):
     question: str
     session_id: str = "default"
