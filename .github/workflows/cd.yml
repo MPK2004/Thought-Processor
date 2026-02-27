@@ -26,7 +26,9 @@ jobs:
 
             echo "🔧 Ensuring Docker Compose is installed..."
             if ! docker compose version > /dev/null 2>&1; then
-              apt-get update && apt-get install -y docker-compose-plugin
+              mkdir -p /usr/local/lib/docker/cli-plugins
+              curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
+              chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
             fi
 
             echo "🏗️ Building containers..."
