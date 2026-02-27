@@ -35,8 +35,11 @@ jobs:
             echo "🏗️ Building containers..."
             docker compose build
 
-            echo "🔄 Restarting stack..."
-            docker compose down
+            echo "� Stopping old containers..."
+            docker ps -q --filter "publish=8000" | xargs -r docker stop | xargs -r docker rm
+            docker compose down 2>/dev/null || true
+
+            echo "🔄 Starting new stack..."
             docker compose up -d
 
             echo "⏳ Waiting for health checks..."
