@@ -20,32 +20,32 @@ jobs:
           script: |
             set -e
 
-            echo "📦 Pulling latest code..."
+            echo "Pulling latest code..."
             cd /root/Thought-Processor
             git fetch origin main
             git reset --hard origin/main
 
-            echo "🔧 Ensuring Docker Compose is installed..."
+            echo "Ensuring Docker Compose is installed..."
             if ! docker compose version > /dev/null 2>&1; then
               mkdir -p /usr/local/lib/docker/cli-plugins
               curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
               chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
             fi
 
-            echo "🏗️ Building containers..."
+            echo "Building containers..."
             docker compose build
 
             echo "� Stopping old containers..."
             docker ps -q --filter "publish=8000" | xargs -r docker stop | xargs -r docker rm
             docker compose down 2>/dev/null || true
 
-            echo "🔄 Starting new stack..."
+            echo "Starting new stack..."
             docker compose up -d
 
-            echo "⏳ Waiting for health checks..."
+            echo "Waiting for health checks..."
             sleep 10
 
-            echo "✅ Checking service status..."
+            echo "Checking service status..."
             docker compose ps
 
-            echo "🎉 Deployment complete!"
+            echo "Deployment complete!"

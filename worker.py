@@ -110,7 +110,7 @@ def process_ingestion(job_id: str, file_path: str, filename: str):
         # ── 7. Mark job COMPLETED ─────────────────────────────────
         job.status = JobStatus.COMPLETED
         db.commit()
-        logger.info(f"[{job_id}] ✅ Ingestion complete")
+        logger.info(f"[{job_id}] Ingestion complete")
 
     except Exception as e:
         db.rollback()
@@ -139,6 +139,6 @@ def process_ingestion(job_id: str, file_path: str, filename: str):
                 job.status = JobStatus.FAILED
                 job.error_message = str(e)[:500]
                 db.commit()
-                logger.error(f"[{job_id}] ❌ Max retries exceeded")
+                logger.error(f"[{job_id}] Max retries exceeded")
     finally:
         db.close()

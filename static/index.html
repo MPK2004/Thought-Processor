@@ -419,12 +419,12 @@
 
                     if (data.status === "COMPLETED") {
                         clearInterval(interval);
-                        btn.innerText = "✅ Done";
+                        btn.innerText = "Done";
                         btn.disabled = false;
                         setTimeout(() => { btn.innerText = "Upload"; }, 3000);
                     } else if (data.status === "FAILED") {
                         clearInterval(interval);
-                        btn.innerText = "❌ Failed";
+                        btn.innerText = "Failed";
                         btn.disabled = false;
                         alert("Ingestion failed: " + (data.error_message || "Unknown error"));
                         setTimeout(() => { btn.innerText = "Upload"; }, 3000);
