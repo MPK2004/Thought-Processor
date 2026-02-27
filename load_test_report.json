@@ -1,0 +1,17 @@
+{
+  "endpoint": "health",
+  "concurrent_users": 50,
+  "duration_seconds": 60,
+  "total_requests": 300,
+  "successes": 0,
+  "failures": 300,
+  "requests_per_second": 5.0,
+  "latency_ms": {
+    "avg": 10925.01,
+    "p50": 10996.93,
+    "p95": 11008.84,
+    "p99": 11010.65,
+    "min": 10548.32,
+    "max": 11011.35
+  }
+}

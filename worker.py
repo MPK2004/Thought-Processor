@@ -1,12 +1,5 @@
-"""
-Background ingestion worker — processes PDF upload jobs from the Redis queue.
-
-Run via:  rq worker --url redis://redis:6379
-"""
-
 import os
 import time
-import logging
 
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -24,31 +17,27 @@ from config import (
 from database import SessionLocal
 from models import IngestionJob, JobStatus
 from redis_client import get_job_queue
+from logger import get_logger
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+log = get_logger("worker")
 
 
 def process_ingestion(job_id: str, file_path: str, filename: str):
     """
-    Main ingestion task — extracted from the original /upload endpoint.
-
-    Idempotent: deletes any existing vectors for this document_id before
-    inserting, so retries never produce duplicates.
+    Main ingestion task. Idempotent: deletes existing vectors for this
+    document_id before inserting, so retries never produce duplicates.
     """
     db = SessionLocal()
     try:
-        # ── 1. Mark job as PROCESSING ─────────────────────────────
         job = db.query(IngestionJob).filter(IngestionJob.id == job_id).first()
         if not job:
-            logger.error(f"Job {job_id} not found in database")
+            log.error(f"Job {job_id} not found in database")
             return
 
         job.status = JobStatus.PROCESSING
         db.commit()
-        logger.info(f"[{job_id}] Processing {filename}...")
+        log.info(f"[{job_id}] PENDING -> PROCESSING | file={filename}")
 
-        # ── 2. OCR conversion via Docling (same as original code) ─
         pipeline_options = PdfPipelineOptions()
         pipeline_options.do_ocr = True
         pipeline_options.do_table_structure = True
@@ -63,8 +52,8 @@ def process_ingestion(job_id: str, file_path: str, filename: str):
 
         doc_converted = converter.convert(file_path)
         md_content = doc_converted.document.export_to_markdown()
+        log.info(f"[{job_id}] OCR complete, markdown_length={len(md_content)}")
 
-        # ── 3. Chunk with RecursiveCharacterTextSplitter ──────────
         langchain_doc = Document(
             page_content=md_content,
             metadata={"source": filename, "document_id": job_id},
@@ -76,11 +65,11 @@ def process_ingestion(job_id: str, file_path: str, filename: str):
         )
         splits = text_splitter.split_documents([langchain_doc])
 
-        # Ensure every chunk carries the document_id
         for doc in splits:
             doc.metadata["document_id"] = job_id
 
-        # ── 4. Idempotency: delete existing vectors for this job ──
+        log.info(f"[{job_id}] Chunked into {len(splits)} chunks")
+
         try:
             qdrant_client.delete(
                 collection_name=QDRANT_COLLECTION,
@@ -93,30 +82,25 @@ def process_ingestion(job_id: str, file_path: str, filename: str):
                     ]
                 ),
             )
-            logger.info(f"[{job_id}] Cleared any previous vectors")
+            log.info(f"[{job_id}] Cleared previous vectors")
         except Exception:
-            # Collection may be empty / first run — safe to ignore
             pass
 
-        # ── 5. Add documents to Qdrant ────────────────────────────
         vector_store = get_vector_store()
         vector_store.add_documents(splits)
-        logger.info(f"[{job_id}] Added {len(splits)} chunks to Qdrant")
+        log.info(f"[{job_id}] Added {len(splits)} chunks to Qdrant")
 
-        # ── 6. Cleanup temp file ──────────────────────────────────
         if os.path.exists(file_path):
             os.remove(file_path)
 
-        # ── 7. Mark job COMPLETED ─────────────────────────────────
         job.status = JobStatus.COMPLETED
         db.commit()
-        logger.info(f"[{job_id}] Ingestion complete")
+        log.info(f"[{job_id}] PROCESSING -> COMPLETED")
 
     except Exception as e:
         db.rollback()
-        logger.error(f"[{job_id}] Ingestion failed: {e}")
+        log.error(f"[{job_id}] Ingestion failed: {e}")
 
-        # Retry logic
         job = db.query(IngestionJob).filter(IngestionJob.id == job_id).first()
         if job:
             job.retry_count += 1
@@ -124,11 +108,10 @@ def process_ingestion(job_id: str, file_path: str, filename: str):
                 job.status = JobStatus.PENDING
                 db.commit()
 
-                # Re-enqueue with exponential backoff
-                delay = 2 ** job.retry_count  # 2s, 4s, 8s
-                logger.info(
-                    f"[{job_id}] Retry {job.retry_count}/{MAX_RETRIES} "
-                    f"in {delay}s"
+                delay = 2 ** job.retry_count
+                log.info(
+                    f"[{job_id}] FAILED -> PENDING (retry "
+                    f"{job.retry_count}/{MAX_RETRIES} in {delay}s)"
                 )
                 time.sleep(delay)
                 queue = get_job_queue()
@@ -139,6 +122,9 @@ def process_ingestion(job_id: str, file_path: str, filename: str):
                 job.status = JobStatus.FAILED
                 job.error_message = str(e)[:500]
                 db.commit()
-                logger.error(f"[{job_id}] Max retries exceeded")
+                log.error(
+                    f"[{job_id}] PROCESSING -> FAILED | "
+                    f"max retries exceeded"
+                )
     finally:
         db.close()

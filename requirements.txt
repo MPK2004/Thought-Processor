@@ -14,8 +14,8 @@ langchain-groq==0.3.2
 qdrant-client==1.17.0
 docling
 
-# ── Production additions ──
 redis
 rq
 sqlalchemy
 psycopg2-binary
+aiohttp
