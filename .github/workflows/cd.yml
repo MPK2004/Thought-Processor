@@ -24,7 +24,12 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            echo "🔧 Building containers..."
+            echo "🔧 Ensuring Docker Compose is installed..."
+            if ! docker compose version > /dev/null 2>&1; then
+              apt-get update && apt-get install -y docker-compose-plugin
+            fi
+
+            echo "🏗️ Building containers..."
             docker compose build
 
             echo "🔄 Restarting stack..."
