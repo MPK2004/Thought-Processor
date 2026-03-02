@@ -1,6 +1,31 @@
-# Dealer RAG API
+# Thought-Processor
 
-A modern, interview-ready, and production-grade Retrieval-Augmented Generation (RAG) backend. This project provides a robust API to ingest PDF documents containing text and tables, process them asynchronously, and query them using state-of-the-art Large Language Models (LLMs) with conversational memory.
+> "A production-grade RAG backend that takes complex PDF manuals as input and asynchronously provisions highly-accurate, conversational AI answers."
+
+## Architecture
+
+```mermaid
+graph TD
+    User([User]) -->|HTTP| Nginx[Nginx :80]
+    Nginx -->|Proxy Pass| API[API Container :8000]
+    API -.->|Cache & Chat History| Redis[(Redis :6379)]
+    API -.->|Job Status| Postgres[(PostgreSQL :5432)]
+    API -->|Job Queue| Redis
+    Redis -->|Dequeue Job| Worker[Background Worker]
+    Worker -->|OCR & Chunking| Qdrant[(Qdrant Cloud)]
+    API -->|Vector Search| Qdrant
+    API -->|LLM Query| Groq[Groq API]
+```
+
+## Results / Benchmarks
+
+- "Context precision: 0.61 (naive PyPDF) ➔ 0.88 (Docling OCR + semantic chunking). Latency: ~350ms TTFT."
+
+## Technical Decisions
+
+1. **Redis Queue (rq) over Celery:** To avoid blocking the FastAPI server during document uploads, we introduced a background worker. We chose `rq` because it is Python-native, simple to configure, and allowed us to maximize our existing Redis container, which was already handling API caching and conversational history.
+2. **Docling for OCR:** Automotive manuals are heavy with complex tables and images. Basic tools like PyPDF fail to preserve this structure. Using Docling required adding graphics libraries (`libGL`) to our Dockerfile, increasing the container size. We accepted this trade-off because it drastically improved vector precision and allowed the LLM to understand tabular technical specs.
+3. **Immutable Deployment CD Pipeline:** In our GitHub Actions CD workflow, we deploy to our DigitalOcean droplet using `git fetch` and `git reset --hard origin/main`. This strict approach ensures the droplet exactly mirrors the repository, treating the server as an immutable target and eliminating manual branch divergence errors.
 
 ## Features
 
@@ -11,7 +36,7 @@ A modern, interview-ready, and production-grade Retrieval-Augmented Generation (
 - **Job Tracking**: Persistent job status tracking (PENDING, PROCESSING, COMPLETED, FAILED) via **PostgreSQL**.
 - **Idempotency & Retries**: Robust job failure handling with exponential backoff and retry mechanisms.
 - **Caching**: Frequently asked questions are cached in Redis to lower latency and LLM costs.
-- **Telemetry & Health Probes**: Includes structured logging, request IDs via middleware, and Kubernetes-style probes (`/health`, `/ready`).
+- **Telemetry & Health Probes**: Includes structured logging, request IDs via middleware, and Kubernetes-style probes (`/health`, `ready`).
 - **Containerized**: Fully orchestrated with **Docker Compose** for easy setup and reproducibility.
 
 ## Technology Stack
