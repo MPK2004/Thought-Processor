@@ -117,11 +117,57 @@
             border-radius: 16px;
             margin-bottom: 20px;
             transition: all 0.3s ease;
+            flex-wrap: wrap;
+            gap: 12px;
         }
 
         .upload-section:hover {
             border-color: rgba(255, 255, 255, 0.15);
             background: rgba(255, 255, 255, 0.05);
+        }
+
+        /* OCR Toggle */
+        .ocr-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .ocr-toggle .toggle-switch {
+            position: relative;
+            width: 40px;
+            height: 22px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 11px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .ocr-toggle .toggle-switch::after {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            background: #64748b;
+            border-radius: 50%;
+            top: 3px;
+            left: 3px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .ocr-toggle input {
+            display: none;
+        }
+
+        .ocr-toggle input:checked + .toggle-switch {
+            background: rgba(59, 130, 246, 0.3);
+        }
+
+        .ocr-toggle input:checked + .toggle-switch::after {
+            transform: translateX(18px);
+            background: var(--primary);
         }
 
         .upload-text {
@@ -336,6 +382,11 @@
             <div class="upload-controls">
                 <label for="pdfFile" class="file-label" id="fileLabel">Choose file</label>
                 <input type="file" id="pdfFile" accept=".pdf" onchange="updateFileName()">
+                <div class="ocr-toggle">
+                    <label>OCR</label>
+                    <input type="checkbox" id="ocrToggle">
+                    <label for="ocrToggle" class="toggle-switch"></label>
+                </div>
                 <button onclick="uploadPDF()">Upload</button>
             </div>
         </div>
@@ -382,8 +433,10 @@
                 return;
             }
             const file = fileInput.files[0];
+            const ocrEnabled = document.getElementById("ocrToggle").checked;
             const formData = new FormData();
             formData.append("file", file);
+            formData.append("ocr", ocrEnabled ? "true" : "false");
 
             const btn = document.querySelector('.upload-controls button');
             btn.innerText = "Uploading...";

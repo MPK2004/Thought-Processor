@@ -1,7 +1,7 @@
 import os
 import uuid
 
-from fastapi import FastAPI, UploadFile, File, Depends, Request
+from fastapi import FastAPI, UploadFile, File, Form, Depends, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 from fastapi.staticfiles import StaticFiles
@@ -108,10 +108,12 @@ class QuestionRequest(BaseModel):
 @app.post("/upload")
 async def upload_pdf(
     file: UploadFile = File(...),
+    ocr: str = Form("false"),
     db: Session = Depends(get_db),
 ):
+    enable_ocr = ocr.lower() == "true"
     job_id = str(uuid.uuid4())
-    log.info(f"Upload received: {file.filename}, job_id={job_id}")
+    log.info(f"Upload received: {file.filename}, job_id={job_id}, ocr={enable_ocr}")
 
     file_ext = os.path.splitext(file.filename)[1]
     safe_filename = f"{job_id}{file_ext}"
@@ -136,6 +138,7 @@ async def upload_pdf(
         job_id,
         file_path,
         file.filename,
+        enable_ocr,
         job_timeout="30m",
     )
     log.info(f"Job {job_id} enqueued to Redis")
@@ -177,7 +180,7 @@ async def ask_question(request: QuestionRequest):
             chat_history.append(AIMessage(content=entry["content"]))
 
     vector_store = get_vector_store()
-    retriever = vector_store.as_retriever(search_kwargs={"k": 5})
+    retriever = vector_store.as_retriever(search_kwargs={"k": 8})
 
     contextualize_prompt = ChatPromptTemplate.from_messages([
         (

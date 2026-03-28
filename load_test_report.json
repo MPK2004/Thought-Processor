@@ -2,16 +2,16 @@
   "endpoint": "health",
   "concurrent_users": 50,
   "duration_seconds": 60,
-  "total_requests": 300,
-  "successes": 0,
-  "failures": 300,
-  "requests_per_second": 5.0,
+  "total_requests": 13310,
+  "successes": 13310,
+  "failures": 0,
+  "requests_per_second": 221.83,
   "latency_ms": {
-    "avg": 10925.01,
-    "p50": 10996.93,
-    "p95": 11008.84,
-    "p99": 11010.65,
-    "min": 10548.32,
-    "max": 11011.35
+    "avg": 225.62,
+    "p50": 204.6,
+    "p95": 384.4,
+    "p99": 679.93,
+    "min": 27.18,
+    "max": 1260.5
   }
 }

@@ -6,7 +6,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.datamodel.base_models import InputFormat
-from qdrant_client.models import Filter, FieldCondition, MatchValue
+from qdrant_client.models import Filter, FieldCondition, MatchValue, VectorParams, Distance
 
 from config import (
     qdrant_client,
@@ -22,7 +22,7 @@ from logger import get_logger
 log = get_logger("worker")
 
 
-def process_ingestion(job_id: str, file_path: str, filename: str):
+def process_ingestion(job_id: str, file_path: str, filename: str, enable_ocr: bool = False):
     """
     Main ingestion task. Idempotent: deletes existing vectors for this
     document_id before inserting, so retries never produce duplicates.
@@ -36,10 +36,10 @@ def process_ingestion(job_id: str, file_path: str, filename: str):
 
         job.status = JobStatus.PROCESSING
         db.commit()
-        log.info(f"[{job_id}] PENDING -> PROCESSING | file={filename}")
+        log.info(f"[{job_id}] PENDING -> PROCESSING | file={filename} | ocr={enable_ocr}")
 
         pipeline_options = PdfPipelineOptions()
-        pipeline_options.do_ocr = True
+        pipeline_options.do_ocr = enable_ocr
         pipeline_options.do_table_structure = True
 
         converter = DocumentConverter(
@@ -60,8 +60,8 @@ def process_ingestion(job_id: str, file_path: str, filename: str):
         )
 
         text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=800,
-            chunk_overlap=200,
+            chunk_size=1500,
+            chunk_overlap=300,
         )
         splits = text_splitter.split_documents([langchain_doc])
 
@@ -70,21 +70,18 @@ def process_ingestion(job_id: str, file_path: str, filename: str):
 
         log.info(f"[{job_id}] Chunked into {len(splits)} chunks")
 
+        # Wipe entire collection so only the new document is in context
         try:
-            qdrant_client.delete(
-                collection_name=QDRANT_COLLECTION,
-                points_selector=Filter(
-                    must=[
-                        FieldCondition(
-                            key="metadata.document_id",
-                            match=MatchValue(value=job_id),
-                        )
-                    ]
-                ),
-            )
-            log.info(f"[{job_id}] Cleared previous vectors")
-        except Exception:
-            pass
+            collection_info = qdrant_client.get_collection(QDRANT_COLLECTION)
+            if collection_info.points_count > 0:
+                qdrant_client.delete_collection(QDRANT_COLLECTION)
+                qdrant_client.create_collection(
+                    collection_name=QDRANT_COLLECTION,
+                    vectors_config=VectorParams(size=384, distance=Distance.COSINE),
+                )
+                log.info(f"[{job_id}] Cleared collection ({collection_info.points_count} points)")
+        except Exception as e:
+            log.warning(f"[{job_id}] Failed to clear collection: {e}")
 
         vector_store = get_vector_store()
         vector_store.add_documents(splits)
